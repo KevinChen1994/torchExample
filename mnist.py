@@ -5,7 +5,7 @@
 
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 
@@ -31,18 +31,51 @@ test_loader = torch.utils.data.DataLoader(test_set, batch_size=BATCH_SIZE, shuff
 
 class LogisticsRegression(nn.Module):
     def __init__(self):
-        super(LR, self).__init__()
-        self.fc = nn.Linear(28*28, 10)
+        super(LogisticsRegression, self).__init__()
+        self.fc = nn.Linear(28 * 28, 10)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        x = x.view(-1, 28*28)
+        x = x.view(-1, 28 * 28)
         out = self.fc(x)
         out = self.sigmoid(out)
         return out
 
 
-model = LogisticsRegression().to(device=DEVICE)
+class CNN(nn.Module):
+    def __init__(self):
+        super(CNN, self).__init__()
+        # batch*1*28*28（每次会送入batch个样本，输入通道数1（黑白图像），图像分辨率是28x28）
+        self.conv1 = nn.Conv2d(1, 10, 5)
+        self.conv2 = nn.Conv2d(10, 20, 3)
+        self.fc1 = nn.Linear(20 * 10 * 10, 500)
+        self.fc2 = nn.Linear(500, 10)
+
+    def forward(self, x):
+        in_size = x.size(0)  # 第一个维度的值就是batch_size
+        '''
+        使用0填充
+        output_height=[input_height/stride_height]  
+        output_width=[input_width/stride_width]
+        不使用0填充 
+        output_height=[(input_height-filter_height+1)/stride_height]  
+        output_width=[(input_width-filter_width+1)/stride_width]
+        '''
+        out = self.conv1(x)  # [batch_size, 1, 28, 28] -> [batch_size, 10, 24, 24] 默认是不使用0填充
+        out = F.relu(out)
+        out = F.max_pool2d(out, 2, 2)  # [batch_size, 10, 24, 24] -> [batch_size, 10, 12, 12]
+        out = self.conv2(out)  # [batch_size, 10, 12, 12] -> [batch_size, 20, 10, 10]
+        out = F.relu(out)
+        out = out.view(in_size, -1)  # [batch_size, 20, 10, 10] -> [batch_size, 20*10*10]
+        out = self.fc1(out)  # [batch_size, 200] -> [batch_size, 500]
+        out = F.relu(out)
+        out = self.fc2(out)  # [batch_size, 500] -> [batch_size, 10]
+        out = F.log_softmax(out, dim=1)  # 计算log(softmax(x))
+        return out
+
+
+# model = LogisticsRegression().to(device=DEVICE)
+model = CNN().to(DEVICE)
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 criterion = nn.CrossEntropyLoss()
